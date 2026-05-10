@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // Change to postgresql for prod
+  url      = env("DATABASE_URL")
+}
+
+// Core Multi-Tenant Models
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches   Branch[]
+  users      User[]
+  settings   Setting[]
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  code      String
+  address   String?
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  users      User[]
+  departments Department[]
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  branchId  String
+  name      String
+  code      String
+  createdAt DateTime @default(now())
+
+  branch    Branch   @relation(fields: [branchId], references: [id])
+}
+
+// User & Access Control
+model User {
+  id            String   @id @default(cuid())
+  tenantId      String
+  branchId      String?
+  email         String   @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  role          String   // e.g. SUPER_ADMIN, BRANCH_ADMIN, RECEPTIONIST, MED_TECH, PATHOLOGIST, CASHIER, etc.
+  status        String   @default("active")
+  mfaEnabled    Boolean  @default(false)
+  mfaSecret     String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  branch        Branch?  @relation(fields: [branchId], references: [id])
+  userRoles     UserRole[]
+  auditLogs     AuditLog[]
+  createdBy     String?
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  userRoles   UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique  // e.g. "patient.create", "lab.result.release", "billing.refund.approve"
+  description String?
+  category    String?   // patient, lab, billing, inventory, admin
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  scope        String   @default("tenant") // tenant, branch, department, self, assignment
+  createdAt    DateTime @default(now())
+
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@unique([roleId, permissionId])
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  branchId  String?
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id])
+  role      Role @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, roleId, branchId])
+}
+
+// Audit & Governance
+model AuditLog {
+  id          String   @id @default(cuid())
+  tenantId    String
+  actorId     String
+  actorRole   String?
+  action      String   // e.g. PATIENT_CREATED, RESULT_RELEASED, PAYMENT_POSTED
+  entityType  String
+  entityId    String
+  before      String?  // JSON string of before state
+  after       String?  // JSON string of after state
+  reason      String?
+  ipAddress   String?
+  userAgent   String?
+  branchId    String?
+  createdAt   DateTime @default(now())
+
+  actor       User     @relation(fields: [actorId], references: [id])
+}
+
+model ApprovalRequest {
+  id          String   @id @default(cuid())
+  tenantId    String
+  requesterId String
+  approverId  String?
+  entityType  String   // PAYMENT_VOID, RESULT_AMEND, STOCK_ADJUST
+  entityId    String
+  action      String
+  status      String   @default("pending") // pending, approved, rejected, cancelled
+  reason      String
+  riskLevel   String   @default("medium")
+  decidedAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  requester   User     @relation(fields: [requesterId], references: [id], name: "requester")
+  approver    User?    @relation(fields: [approverId], references: [id], name: "approver")
+}
+
+// Settings & Numbering
+model Setting {
+  id        String   @id @default(cuid())
+  tenantId  String
+  key       String
+  value     String
+  type      String   @default("string")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, key])
+}
+
+model NumberingSequence {
+  id          String   @id @default(cuid())
+  tenantId    String
+  branchId    String?
+  entityType  String   // PATIENT, ORDER, INVOICE, LAB_ORDER, RECEIPT
+  prefix      String
+  current     Int      @default(0)
+  year        Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, branchId, entityType, year])
+}
+
+// Future models will be added in later phases:
+// Patient, Order, Invoice, Payment, LabOrder, Specimen, LabResult (with versions), etc.
