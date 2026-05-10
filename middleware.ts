@@ -16,7 +16,7 @@ const protectedRoutes = [
 ]
 
 // Public routes
-const publicRoutes = ['/login', '/register', '/api/auth/login', '/api/auth/register']
+const publicRoutes = ['/login', '/register', '/api/auth/login', '/api/auth/register', '/api/auth/verify', '/api/auth/logout']
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

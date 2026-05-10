@@ -62,11 +62,13 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
-  branch        Branch?  @relation(fields: [branchId], references: [id])
-  userRoles     UserRole[]
-  auditLogs     AuditLog[]
-  createdBy     String?
+  tenant              Tenant   @relation(fields: [tenantId], references: [id])
+  branch              Branch?  @relation(fields: [branchId], references: [id])
+  userRoles           UserRole[]
+  auditLogs           AuditLog[]
+  approvalsRequested  ApprovalRequest[] @relation(name: "requester")
+  approvalsApproved   ApprovalRequest[] @relation(name: "approver")
+  createdBy           String?
 }
 
 model Role {
